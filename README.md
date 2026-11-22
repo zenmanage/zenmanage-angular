@@ -33,6 +33,12 @@ npm install @zenmanage/angular @zenmanage/sdk
 
 Requires Angular 20 or newer (`@angular/core`, `@angular/common`, `@angular/router`), `rxjs` 7.8 or newer, and `@zenmanage/sdk` 3.5.1 or newer.
 
+## Documentation
+
+- [Angular quickstart](https://zenmanage.com/developers/quickstarts/angular/): install, providers, signals, directives, guards, and SSR, step by step
+- [SDKs and integrations](https://zenmanage.com/developers/sdks/): every Zenmanage SDK and its install command
+- [Zenmanage documentation](https://zenmanage.com/developers/): API reference, targeting guides, and the rest of the developer docs
+
 ## Key Compatibility
 
 - Browser/client runtime: use client keys prefixed with `cli_`
