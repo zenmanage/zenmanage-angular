@@ -1,27 +1,32 @@
-import { Component, inject } from '@angular/core';
-import { ZenmanageFlagsService, ZenmanageIfFlagDirective } from '@zenmanage/angular';
+import { Component } from '@angular/core';
+import {
+  ZenmanageIfFlagDirective,
+  injectBooleanFlag,
+  injectConfig,
+  injectVariant,
+} from '@zenmanage/angular';
 
 @Component({
   selector: 'example-simple-flags',
-  standalone: true,
   imports: [ZenmanageIfFlagDirective],
   template: `
-    <h2>Simple Flags</h2>
-    <p>new-dashboard enabled: {{ enabled }}</p>
+    <h2>Simple flags</h2>
 
-    <div *zenmanageIfFlag="'new-dashboard'; default: false; else: legacy">
-      Rendering dashboard v2
-    </div>
+    <!-- A signal: re-renders when the flag changes, with no subscription to manage. -->
+    <p>new-dashboard is {{ dashboard.value() ? 'on' : 'off' }}</p>
+    <p>checkout-flow variant: {{ checkout.variant() }}</p>
+    <p>max-items: {{ maxItems.value() }}</p>
 
-    <ng-template #legacy>Rendering dashboard v1</ng-template>
+    <!-- Or let a directive decide what to render. -->
+    <section *zenmanageIfFlag="'new-dashboard'; else legacy; loading: spinner">
+      Dashboard v2
+    </section>
+    <ng-template #legacy><section>Dashboard v1</section></ng-template>
+    <ng-template #spinner><p>Loading…</p></ng-template>
   `,
 })
 export class SimpleFlagsExampleComponent {
-  private readonly flags = inject(ZenmanageFlagsService);
-
-  enabled = false;
-
-  async ngOnInit(): Promise<void> {
-    this.enabled = await this.flags.isEnabled('new-dashboard', false);
-  }
+  readonly dashboard = injectBooleanFlag('new-dashboard');
+  readonly checkout = injectVariant('checkout-flow');
+  readonly maxItems = injectConfig('max-items', 25);
 }

@@ -1,98 +1,99 @@
 import {
   Directive,
   Input,
-  OnChanges,
-  OnDestroy,
-  SimpleChanges,
   TemplateRef,
   ViewContainerRef,
+  effect,
+  inject,
+  signal,
+  untracked,
 } from '@angular/core';
-import type { Context, FlagValue } from '@zenmanage/sdk';
-import { ZenmanageFlagsService } from './zenmanage-flags.service';
+import type { Context } from '@zenmanage/sdk';
+import { injectFlag } from './inject-flag';
 
+/**
+ * Renders its template while a boolean flag is on.
+ *
+ * ```html
+ * <app-new-dashboard *zenmanageIfFlag="'new-dashboard'; else: legacy; loading: spinner" />
+ * ```
+ *
+ * `else` renders when the flag is off (or on, with `invert`), and `loading` while the first
+ * value is on its way. A refresh doesn't remount the view unless the answer changes.
+ */
 @Directive({
   selector: '[zenmanageIfFlag]',
   standalone: true,
 })
-export class ZenmanageIfFlagDirective implements OnChanges, OnDestroy {
-  @Input() zenmanageIfFlag = '';
-  @Input() zenmanageIfFlagDefault: FlagValue = false;
-  @Input() zenmanageIfFlagElse: TemplateRef<unknown> | null = null;
-  @Input() zenmanageIfFlagContext?: Context;
-  @Input() zenmanageIfFlagInvert = false;
+export class ZenmanageIfFlagDirective {
+  private readonly templateRef = inject<TemplateRef<unknown>>(TemplateRef);
+  private readonly viewContainer = inject(ViewContainerRef);
+  private readonly key = signal('');
+  private readonly defaultValue = signal(false);
+  private readonly elseTemplate = signal<TemplateRef<unknown> | null>(null);
+  private readonly loadingTemplate = signal<TemplateRef<unknown> | null>(null);
+  private readonly invert = signal(false);
+  private readonly context = signal<Context | undefined>(undefined);
+  private shown: TemplateRef<unknown> | null = null;
 
-  private currentRequestId = 0;
-
-  constructor(
-    private readonly templateRef: TemplateRef<unknown>,
-    private readonly viewContainer: ViewContainerRef,
-    private readonly flags: ZenmanageFlagsService
-  ) {}
-
-  ngOnChanges(_changes: SimpleChanges): void {
-    void this.renderFromFlag();
+  @Input({ required: true })
+  set zenmanageIfFlag(key: string) {
+    this.key.set(key);
   }
 
-  ngOnDestroy(): void {
-    this.currentRequestId += 1;
+  @Input()
+  set zenmanageIfFlagDefault(value: boolean) {
+    this.defaultValue.set(value);
   }
 
-  private async renderFromFlag(): Promise<void> {
-    if (!this.zenmanageIfFlag) {
-      this.clearView();
+  @Input()
+  set zenmanageIfFlagElse(template: TemplateRef<unknown> | null | undefined) {
+    this.elseTemplate.set(template ?? null);
+  }
+
+  @Input()
+  set zenmanageIfFlagLoading(template: TemplateRef<unknown> | null | undefined) {
+    this.loadingTemplate.set(template ?? null);
+  }
+
+  @Input()
+  set zenmanageIfFlagInvert(value: boolean) {
+    this.invert.set(value);
+  }
+
+  @Input()
+  set zenmanageIfFlagContext(context: Context | undefined) {
+    this.context.set(context);
+  }
+
+  constructor() {
+    const flag = injectFlag<boolean>(this.key, this.defaultValue, { context: this.context });
+
+    effect(() => {
+      let next: TemplateRef<unknown> | null;
+
+      if (!this.key()) {
+        next = null;
+      } else if (flag.isLoading()) {
+        next = this.loadingTemplate();
+      } else {
+        next = flag.value() !== this.invert() ? this.templateRef : this.elseTemplate();
+      }
+
+      untracked(() => this.show(next));
+    });
+  }
+
+  private show(template: TemplateRef<unknown> | null): void {
+    if (template === this.shown) {
       return;
     }
 
-    const requestId = ++this.currentRequestId;
-
-    try {
-      const isEnabled = await this.flags.isEnabled(this.zenmanageIfFlag, this.asBooleanDefault(), {
-        context: this.zenmanageIfFlagContext,
-      });
-
-      if (requestId !== this.currentRequestId) {
-        return;
-      }
-
-      const shouldRender = this.zenmanageIfFlagInvert ? !isEnabled : isEnabled;
-      this.updateView(shouldRender);
-    } catch {
-      if (requestId !== this.currentRequestId) {
-        return;
-      }
-
-      this.updateView(false);
-    }
-  }
-
-  private asBooleanDefault(): boolean {
-    const defaultValue = this.zenmanageIfFlagDefault;
-
-    if (typeof defaultValue === 'boolean') {
-      return defaultValue;
-    }
-
-    if (typeof defaultValue === 'number') {
-      return defaultValue !== 0;
-    }
-
-    return defaultValue.toLowerCase() === 'true';
-  }
-
-  private updateView(shouldRenderPrimary: boolean): void {
     this.viewContainer.clear();
+    this.shown = template;
 
-    if (shouldRenderPrimary) {
-      this.viewContainer.createEmbeddedView(this.templateRef);
-      return;
+    if (template) {
+      this.viewContainer.createEmbeddedView(template);
     }
-
-    if (this.zenmanageIfFlagElse) {
-      this.viewContainer.createEmbeddedView(this.zenmanageIfFlagElse);
-    }
-  }
-
-  private clearView(): void {
-    this.viewContainer.clear();
   }
 }

@@ -1,209 +1,240 @@
-import { Injector, runInInjectionContext } from '@angular/core';
-import { describe, expect, it, vi } from 'vitest';
-import {
-  ActivatedRouteSnapshot,
-  Route,
-  Router,
-  RouterStateSnapshot,
-  UrlSegment,
-  UrlTree,
-} from '@angular/router';
+import { Component } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { Router, provideRouter, type Routes } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
+import { Attribute, Context } from '@zenmanage/sdk';
+import { describe, expect, it } from 'vitest';
 import { canActivateFlag, canMatchFlag, ZenmanageFlagGuard } from '../src/lib/guards';
-import { ZenmanageFlagsService } from '../src/lib/zenmanage-flags.service';
+import { flag, installFakeApi } from './fakeApi';
+import { configure } from './helpers';
 
-describe('guards', () => {
-  it('allows canActivate when feature is enabled', async () => {
-    const flags = {
-      isEnabled: vi.fn(async () => true),
-      getVariant: vi.fn(async () => 'control'),
-    } as unknown as ZenmanageFlagsService;
+@Component({ template: 'page' })
+class Page {}
 
-    const router = {
-      parseUrl: vi.fn((value: string) => ({ redirectedTo: value }) as unknown as UrlTree),
-    } as unknown as Router;
+@Component({ template: 'home' })
+class Home {}
 
-    const guard = new ZenmanageFlagGuard(flags, router);
-    const route = {
-      data: {
-        zenmanageFlag: {
-          key: 'new-ui',
-          defaultValue: false,
-        },
-      },
-    } as unknown as ActivatedRouteSnapshot;
+/** Returns a function that navigates and reports where the router ended up. One harness per test. */
+async function browse(): Promise<(url: string) => Promise<string>> {
+  const harness = await RouterTestingHarness.create();
 
-    const result = await guard.canActivate(route);
+  return async (url) => {
+    await harness.navigateByUrl(url);
+    return TestBed.inject(Router).url;
+  };
+}
 
-    expect(result).toBe(true);
-    expect((flags.isEnabled as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('new-ui');
+function setUp(routes: Routes): void {
+  configure({}, [provideRouter(routes)]);
+}
+
+describe('canActivateFlag', () => {
+  it('lets the route activate while the flag is on', async () => {
+    installFakeApi([flag('beta', true)]);
+    const routes: Routes = [
+      { path: 'beta', component: Page, canActivate: [canActivateFlag({ key: 'beta' })] },
+    ];
+    setUp(routes);
+    const go = await browse();
+
+    expect(await go('/beta')).toBe('/beta');
   });
 
-  it('returns redirect UrlTree when feature is disabled and redirect is configured', async () => {
-    const flags = {
-      isEnabled: vi.fn(async () => false),
-      getVariant: vi.fn(async () => 'control'),
-    } as unknown as ZenmanageFlagsService;
+  it('blocks the route while the flag is off', async () => {
+    installFakeApi([flag('beta', false)]);
+    const routes: Routes = [
+      { path: '', component: Home },
+      { path: 'beta', component: Page, canActivate: [canActivateFlag({ key: 'beta' })] },
+    ];
+    setUp(routes);
+    const go = await browse();
 
-    const urlTree = { redirectedTo: '/fallback' } as unknown as UrlTree;
-    const router = {
-      parseUrl: vi.fn(() => urlTree),
-    } as unknown as Router;
-
-    const guard = new ZenmanageFlagGuard(flags, router);
-    const route = {
-      data: {
-        zenmanageFlag: {
-          key: 'new-ui',
-          redirectTo: '/fallback',
-        },
-      },
-    } as unknown as ActivatedRouteSnapshot;
-
-    const result = await guard.canActivate(route);
-
-    expect(result).toBe(urlTree);
+    expect(await go('/beta')).toBe('/');
   });
 
-  it('returns provided UrlTree redirect object without parsing', async () => {
-    const flags = {
-      isEnabled: vi.fn(async () => false),
-      getVariant: vi.fn(async () => 'control'),
-    } as unknown as ZenmanageFlagsService;
-
-    const router = {
-      parseUrl: vi.fn(() => ({ redirectedTo: '/unused' }) as unknown as UrlTree),
-    } as unknown as Router;
-
-    const guard = new ZenmanageFlagGuard(flags, router);
-    const redirectTree = { redirectedTo: '/tree' } as unknown as UrlTree;
-    const route = {
-      data: {
-        zenmanageFlag: {
-          key: 'new-ui',
-          redirectTo: redirectTree,
-        },
+  it('redirects with a string or a UrlTree', async () => {
+    installFakeApi([flag('beta', false)]);
+    const routes: Routes = [
+      { path: 'upgrade', component: Home },
+      {
+        path: 'beta',
+        component: Page,
+        canActivate: [canActivateFlag({ key: 'beta', redirectTo: '/upgrade' })],
       },
-    } as unknown as ActivatedRouteSnapshot;
+      {
+        path: 'beta-tree',
+        component: Page,
+        canActivate: [
+          () => {
+            const router = TestBed.inject(Router);
+            return canActivateFlag({ key: 'beta', redirectTo: router.parseUrl('/upgrade') })(
+              {} as never,
+              {} as never
+            );
+          },
+        ],
+      },
+    ];
+    setUp(routes);
+    const go = await browse();
 
-    const result = await guard.canActivate(route);
-
-    expect(result).toBe(redirectTree);
-    expect(router.parseUrl).not.toHaveBeenCalled();
+    expect(await go('/beta')).toBe('/upgrade');
+    expect(await go('/beta-tree')).toBe('/upgrade');
   });
 
-  it('supports function-based canActivate guard', async () => {
-    const flags = {
-      isEnabled: vi.fn(async () => true),
-      getVariant: vi.fn(async () => 'control'),
-    } as unknown as ZenmanageFlagsService;
+  it('uses the default for a flag that does not exist', async () => {
+    installFakeApi([]);
+    const routes: Routes = [
+      {
+        path: 'open',
+        component: Page,
+        canActivate: [canActivateFlag({ key: 'missing', defaultValue: true })],
+      },
+    ];
+    setUp(routes);
+    const go = await browse();
 
-    const router = {
-      parseUrl: vi.fn((value: string) => ({ redirectedTo: value }) as unknown as UrlTree),
-    } as unknown as Router;
+    expect(await go('/open')).toBe('/open');
+  });
 
-    const injector = Injector.create({
-      providers: [
-        { provide: ZenmanageFlagsService, useValue: flags },
-        { provide: Router, useValue: router },
-      ],
-    });
+  it('matches a variant, or any of several', async () => {
+    installFakeApi([flag('checkout', 'stepper')]);
+    const routes: Routes = [
+      { path: '', component: Home },
+      {
+        path: 'one',
+        component: Page,
+        canActivate: [canActivateFlag({ key: 'checkout', expectedVariant: 'one-page' })],
+      },
+      {
+        path: 'either',
+        component: Page,
+        canActivate: [
+          canActivateFlag({ key: 'checkout', expectedVariant: ['one-page', 'stepper'] }),
+        ],
+      },
+    ];
+    setUp(routes);
+    const go = await browse();
 
-    const guardFn = canActivateFlag({ key: 'route-flag', defaultValue: false });
-    const result = await runInInjectionContext(injector, () =>
-      guardFn({} as ActivatedRouteSnapshot, {} as RouterStateSnapshot)
+    expect(await go('/one')).toBe('/');
+    expect(await go('/either')).toBe('/either');
+  });
+
+  it('inverts', async () => {
+    installFakeApi([flag('beta', true)]);
+    const routes: Routes = [
+      { path: '', component: Home },
+      {
+        path: 'old',
+        component: Page,
+        canActivate: [canActivateFlag({ key: 'beta', invert: true })],
+      },
+    ];
+    setUp(routes);
+    const go = await browse();
+
+    expect(await go('/old')).toBe('/');
+  });
+
+  it('evaluates for the context given to the guard', async () => {
+    installFakeApi([
+      flag('beta', false, [
+        { clauses: [{ attribute: 'plan', operator: 'equal', value: 'pro' }], value: true },
+      ] as never),
+    ]);
+    const pro = Context.single('user', 'a');
+    pro.addAttribute(new Attribute('plan', ['pro']));
+    const routes: Routes = [
+      { path: '', component: Home },
+      {
+        path: 'pro',
+        component: Page,
+        canActivate: [canActivateFlag({ key: 'beta', context: pro })],
+      },
+    ];
+    setUp(routes);
+    const go = await browse();
+
+    expect(await go('/pro')).toBe('/pro');
+  });
+});
+
+describe('canMatchFlag', () => {
+  it('skips the route when the flag is off, so the next one matches', async () => {
+    installFakeApi([flag('v2', false)]);
+    const routes: Routes = [
+      { path: 'dashboard', component: Page, canMatch: [canMatchFlag({ key: 'v2' })] },
+      { path: 'dashboard', component: Home },
+    ];
+    setUp(routes);
+
+    const harness = await RouterTestingHarness.create();
+    const component = await harness.navigateByUrl('/dashboard');
+
+    expect(component).toBeInstanceOf(Home);
+  });
+
+  it('matches the route when the flag is on', async () => {
+    installFakeApi([flag('v2', true)]);
+    const routes: Routes = [
+      { path: 'dashboard', component: Page, canMatch: [canMatchFlag({ key: 'v2' })] },
+      { path: 'dashboard', component: Home },
+    ];
+    setUp(routes);
+
+    const harness = await RouterTestingHarness.create();
+
+    expect(await harness.navigateByUrl('/dashboard')).toBeInstanceOf(Page);
+  });
+});
+
+describe('ZenmanageFlagGuard', () => {
+  it('reads its options from route.data.zenmanageFlag', async () => {
+    installFakeApi([flag('beta', false)]);
+    const routes: Routes = [
+      { path: 'upgrade', component: Home },
+      {
+        path: 'beta',
+        component: Page,
+        canActivate: [ZenmanageFlagGuard],
+        data: { zenmanageFlag: { key: 'beta', redirectTo: '/upgrade' } },
+      },
+    ];
+    setUp(routes);
+    const go = await browse();
+
+    expect(await go('/beta')).toBe('/upgrade');
+  });
+
+  it('works as a canMatch guard too', async () => {
+    installFakeApi([flag('v2', true)]);
+    const routes: Routes = [
+      {
+        path: 'dashboard',
+        component: Page,
+        canMatch: [ZenmanageFlagGuard],
+        data: { zenmanageFlag: { key: 'v2' } },
+      },
+    ];
+    setUp(routes);
+
+    const harness = await RouterTestingHarness.create();
+
+    expect(await harness.navigateByUrl('/dashboard')).toBeInstanceOf(Page);
+  });
+
+  it('throws a clear error when the route has no configuration', () => {
+    installFakeApi([]);
+    setUp([]);
+    const guard = TestBed.inject(ZenmanageFlagGuard);
+
+    expect(() => guard.canActivate({ data: {} } as never)).toThrow(
+      'Missing route.data.zenmanageFlag.key'
     );
-
-    expect(result).toBe(true);
-  });
-
-  it('supports function-based canMatch guard', async () => {
-    const flags = {
-      isEnabled: vi.fn(async () => true),
-      getVariant: vi.fn(async () => 'control'),
-    } as unknown as ZenmanageFlagsService;
-
-    const router = {
-      parseUrl: vi.fn((value: string) => ({ redirectedTo: value }) as unknown as UrlTree),
-    } as unknown as Router;
-
-    const injector = Injector.create({
-      providers: [
-        { provide: ZenmanageFlagsService, useValue: flags },
-        { provide: Router, useValue: router },
-      ],
-    });
-
-    const guardFn = canMatchFlag({ key: 'route-flag', defaultValue: false });
-    const result = await runInInjectionContext(injector, () =>
-      guardFn({} as Route, [] as UrlSegment[])
+    expect(() => guard.canMatch({ data: {} } as never, [])).toThrow(
+      'Missing route.data.zenmanageFlag.key'
     );
-
-    expect(result).toBe(true);
-  });
-
-  it('supports variant-based route evaluation with invert', async () => {
-    const flags = {
-      isEnabled: vi.fn(async () => true),
-      getVariant: vi.fn(async () => 'one-page'),
-    } as unknown as ZenmanageFlagsService;
-
-    const router = {
-      parseUrl: vi.fn((value: string) => ({ redirectedTo: value }) as unknown as UrlTree),
-    } as unknown as Router;
-
-    const guard = new ZenmanageFlagGuard(flags, router);
-    const route = {
-      data: {
-        zenmanageFlag: {
-          key: 'checkout-flow',
-          expectedVariant: ['one-page'],
-          invert: true,
-          redirectTo: '/control',
-        },
-      },
-    } as unknown as ActivatedRouteSnapshot;
-
-    const result = await guard.canActivate(route);
-    expect(result).toEqual({ redirectedTo: '/control' });
-  });
-
-  it('supports class-based canMatch evaluation', async () => {
-    const flags = {
-      isEnabled: vi.fn(async () => true),
-      getVariant: vi.fn(async () => 'control'),
-    } as unknown as ZenmanageFlagsService;
-
-    const router = {
-      parseUrl: vi.fn((value: string) => ({ redirectedTo: value }) as unknown as UrlTree),
-    } as unknown as Router;
-
-    const guard = new ZenmanageFlagGuard(flags, router);
-    const route = {
-      data: {
-        zenmanageFlag: {
-          key: 'match-flag',
-          defaultValue: false,
-        },
-      },
-    } as unknown as Route;
-
-    const result = await guard.canMatch(route, [] as UrlSegment[]);
-    expect(result).toBe(true);
-  });
-
-  it('throws when required route guard data is missing', async () => {
-    const flags = {
-      isEnabled: vi.fn(async () => true),
-      getVariant: vi.fn(async () => 'control'),
-    } as unknown as ZenmanageFlagsService;
-
-    const router = {
-      parseUrl: vi.fn((value: string) => ({ redirectedTo: value }) as unknown as UrlTree),
-    } as unknown as Router;
-
-    const guard = new ZenmanageFlagGuard(flags, router);
-    expect(() => guard.canActivate({ data: {} } as unknown as ActivatedRouteSnapshot)).toThrow(
-      'Missing route.data.zenmanageFlag.key configuration for Zenmanage guard evaluation.'
-    );
+    expect(() => guard.canActivate({} as never)).toThrow('Missing route.data.zenmanageFlag.key');
   });
 });

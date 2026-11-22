@@ -1,19 +1,19 @@
-# Angular App Example
+# Angular app example
 
-This example demonstrates a standalone Angular app using:
+A standalone Angular application using:
 
-- `provideZenmanage(...)` for DI setup
-- `ZenmanageIfFlagDirective` and `ZenmanageIfVariantDirective`
-- `canActivateFlag(...)` route guard
+- `provideZenmanage(...)` for setup, with a client key in the browser and a server key on the server
+- `injectVariant` and the `*zenmanageIfFlag` / `*zenmanageIfVariant` directives
+- `canActivateFlag(...)` to gate a route
+- Angular SSR: the server renders with the real flag values and hands them to the browser through `TransferState`
 
 ## Files
 
-- `src/main.ts`
-- `src/app/app.config.ts`
-- `src/app/app.component.ts`
-- `src/app/app.routes.ts`
-- `src/app/beta.component.ts`
+- `src/main.ts`: browser entry
+- `src/main.server.ts`: server entry
+- `src/app/app.config.ts`, `src/app/app.config.server.ts`: providers for each side
+- `src/app/app.component.ts`, `src/app/app.routes.ts`, `src/app/beta.component.ts`
 
-## How to Use
+## How to use
 
-Create a new Angular app with Angular CLI, then copy these files into your app and install `@zenmanage/angular`.
+Create an Angular app with the Angular CLI (add `--ssr` for server rendering), install `@zenmanage/angular` and `@zenmanage/sdk`, and copy these files in. Put your server key in the `ZENMANAGE_SERVER_KEY` environment variable on the server.

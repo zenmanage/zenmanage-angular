@@ -1,33 +1,18 @@
-# Zenmanage Angular SDK Examples
+# Zenmanage Angular SDK examples
 
-This directory contains examples that mirror the core JavaScript SDK use-cases while using Angular patterns.
+Short, type-checked samples (`npm run type-check` compiles them with `ngc` and strict templates). Each file is self-contained; copy what you need.
 
-## Setup
+| File                     | Shows                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------- |
+| `simple-flags.ts`        | `injectBooleanFlag`, `injectVariant`, `injectConfig` and `*zenmanageIfFlag`           |
+| `json-flags.ts`          | JSON flags: an object or array default                                                |
+| `context-based-flags.ts` | A signal for the current user, a context per flag, evaluating in code                 |
+| `ab-testing.ts`          | `*zenmanageIfVariant` and `injectVariant`                                             |
+| `defaults.ts`            | Fallback values with a `DefaultsCollection` and inline defaults                       |
+| `caching.ts`             | `cacheTtl`, usage reporting, `refresh()`                                              |
+| `percentage-rollouts.ts` | Rollouts bucket by the context's identifier                                           |
+| `ssr.ts`                 | Angular SSR: a server key on the server, a client key in the browser, `TransferState` |
+| `server-routes.ts`       | Reading flags in server code that isn't a component                                   |
+| `angular-app/`           | A standalone application with routing, directives, guards and SSR                     |
 
-```bash
-npm install
-export ZENMANAGE_ENVIRONMENT_TOKEN="cli_your_client_key_here"
-```
-
-## Examples
-
-### simple-flags.ts
-Basic service-based flag evaluation in an Angular component.
-
-### context-based-flags.ts
-Context-aware targeting using `Context` and `Attribute`.
-
-### ab-testing.ts
-Variant-driven rendering and experiment branching.
-
-### defaults.ts
-Default values and `DefaultsCollection` fallback behavior.
-
-### caching.ts
-Cache TTL and usage reporting setup via `provideZenmanage`.
-
-### percentage-rollouts.ts
-Deterministic rollout evaluation using context identifiers.
-
-### angular-app/
-Standalone Angular application sample showing provider setup, directives, and route guards.
+Use a client key (`cli_...`) in the browser and a server key (`srv_...`) on a server. `@zenmanage/sdk` refuses the wrong one in each place.

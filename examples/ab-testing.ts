@@ -1,24 +1,24 @@
-import { Component, inject } from '@angular/core';
-import { ZenmanageFlagsService } from '@zenmanage/angular';
+import { Component } from '@angular/core';
+import { ZenmanageIfVariantDirective, injectVariant } from '@zenmanage/angular';
 
 @Component({
   selector: 'example-ab-testing',
-  standalone: true,
+  imports: [ZenmanageIfVariantDirective],
   template: `
-    <h2>A/B Testing</h2>
-    <p>checkout-flow variant: {{ variant }}</p>
-    <p>{{ message }}</p>
+    <!-- Render one branch per variant... -->
+    <p *zenmanageIfVariant="'checkout-flow'; is: 'one-page'; else other">One-page checkout</p>
+    <ng-template #other>
+      <p *zenmanageIfVariant="'checkout-flow'; is: ['stepper', 'wizard']; else control">
+        Multi-step checkout
+      </p>
+    </ng-template>
+    <ng-template #control><p>Classic checkout</p></ng-template>
+
+    <!-- ...or read the variant and decide in code. -->
+    <p>Variant: {{ checkout.variant() }}</p>
   `,
 })
 export class AbTestingExampleComponent {
-  private readonly flags = inject(ZenmanageFlagsService);
-
-  variant = 'control';
-  message = 'Loading...';
-
-  async ngOnInit(): Promise<void> {
-    this.variant = await this.flags.getVariant('checkout-flow', 'control');
-    this.message =
-      this.variant === 'one-page' ? 'Render one-page checkout' : 'Render multi-step checkout';
-  }
+  // 'control' is what shows until the variant has loaded, and when it can't be.
+  readonly checkout = injectVariant('checkout-flow', 'control');
 }

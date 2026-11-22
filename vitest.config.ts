@@ -3,13 +3,16 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     globals: true,
-    environment: 'node',
-    include: ['tests/**/*.test.ts'],
+    // Component tests run in jsdom. Server rendering and server helpers run in Node: a file
+    // opts in with `// @vitest-environment node`, because @zenmanage/sdk takes a window to mean
+    // "browser" and rejects server keys there.
+    environment: 'jsdom',
     setupFiles: ['tests/setup.ts'],
+    include: ['tests/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
-      include: ['src/lib/**/*.ts'],
+      include: ['src/**/*.ts'],
       exclude: [
         'node_modules/**',
         'dist/**',
@@ -17,6 +20,7 @@ export default defineConfig({
         'examples/**',
         '**/*.d.ts',
         '**/*.config.ts',
+        'src/public-api.ts',
       ],
       thresholds: {
         lines: 92,

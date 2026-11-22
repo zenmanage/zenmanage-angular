@@ -1,270 +1,277 @@
-import type { TemplateRef, ViewContainerRef } from '@angular/core';
-import { describe, expect, it, vi } from 'vitest';
+import { Component, signal } from '@angular/core';
+import { Attribute, Context } from '@zenmanage/sdk';
+import { describe, expect, it } from 'vitest';
 import { ZenmanageIfFlagDirective } from '../src/lib/zenmanage-if-flag.directive';
 import { ZenmanageIfVariantDirective } from '../src/lib/zenmanage-if-variant.directive';
-import type { ZenmanageFlagsService } from '../src/lib/zenmanage-flags.service';
+import { flag, installFakeApi } from './fakeApi';
+import { configure, render, service, text, until } from './helpers';
 
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
+@Component({
+  imports: [ZenmanageIfFlagDirective],
+  template: `
+    <section>
+      <span
+        *zenmanageIfFlag="
+          key();
+          else off;
+          loading: pending;
+          default: fallback();
+          invert: invert();
+          context: context()
+        "
+        >on</span
+      >
+      <ng-template #off><i>off</i></ng-template>
+      <ng-template #pending><i>loading</i></ng-template>
+    </section>
+  `,
+})
+class FlagHost {
+  readonly key = signal('promo');
+  readonly fallback = signal(false);
+  readonly invert = signal(false);
+  readonly context = signal<Context | undefined>(undefined);
 }
 
-function createViewContainerMock(): Pick<ViewContainerRef, 'clear' | 'createEmbeddedView'> {
-  return {
-    clear: vi.fn(),
-    createEmbeddedView: vi.fn(),
-  } as unknown as Pick<ViewContainerRef, 'clear' | 'createEmbeddedView'>;
+@Component({
+  imports: [ZenmanageIfFlagDirective],
+  template: `<span *zenmanageIfFlag="'promo'">on</span>`,
+})
+class BareFlagHost {}
+
+@Component({
+  imports: [ZenmanageIfVariantDirective],
+  template: `
+    <section>
+      <span
+        *zenmanageIfVariant="
+          key();
+          is: expected();
+          else other;
+          loading: pending;
+          default: fallback();
+          invert: invert();
+          context: context()
+        "
+        >match</span
+      >
+      <ng-template #other><i>other</i></ng-template>
+      <ng-template #pending><i>loading</i></ng-template>
+    </section>
+  `,
+})
+class VariantHost {
+  readonly key = signal('checkout');
+  readonly expected = signal<string | string[]>(['one-page', 'stepper']);
+  readonly fallback = signal('control');
+  readonly invert = signal(false);
+  readonly context = signal<Context | undefined>(undefined);
 }
 
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
+describe('*zenmanageIfFlag', () => {
+  it('shows the loading template, then the template for an enabled flag', async () => {
+    installFakeApi([flag('promo', true)]);
+    configure();
+
+    const fixture = render(FlagHost);
+    expect(text(fixture)).toBe('loading');
+
+    await until(fixture, () => expect(text(fixture)).toBe('on'));
   });
 
-  return { promise, resolve };
-}
+  it('shows the else template for a disabled flag', async () => {
+    installFakeApi([flag('promo', false)]);
+    configure();
 
-function invokeRenderFromFlag(directive: ZenmanageIfFlagDirective): Promise<void> {
-  const internal = directive as unknown as { renderFromFlag: () => Promise<void> };
-  return internal.renderFromFlag();
-}
+    const fixture = render(FlagHost);
 
-function invokeRenderFromVariant(directive: ZenmanageIfVariantDirective): Promise<void> {
-  const internal = directive as unknown as { renderFromVariant: () => Promise<void> };
-  return internal.renderFromVariant();
-}
-
-describe('ZenmanageIfFlagDirective', () => {
-  it('clears view when no flag key is provided', async () => {
-    const templateRef = {} as TemplateRef<unknown>;
-    const viewContainer = createViewContainerMock();
-    const isEnabled = vi.fn(async () => true);
-    const flags = {
-      isEnabled,
-    } as Pick<ZenmanageFlagsService, 'isEnabled'>;
-
-    const directive = new ZenmanageIfFlagDirective(
-      templateRef,
-      viewContainer as never,
-      flags as never
-    );
-    directive.zenmanageIfFlag = '';
-
-    await invokeRenderFromFlag(directive);
-
-    expect(viewContainer.clear).toHaveBeenCalledTimes(1);
-    expect(isEnabled).not.toHaveBeenCalled();
+    await until(fixture, () => expect(text(fixture)).toBe('off'));
   });
 
-  it('renders primary template when flag is enabled', async () => {
-    const templateRef = {} as TemplateRef<unknown>;
-    const viewContainer = createViewContainerMock();
-    const flags = {
-      isEnabled: vi.fn(async () => true),
-    } as never;
+  it('inverts', async () => {
+    installFakeApi([flag('promo', false)]);
+    configure();
 
-    const directive = new ZenmanageIfFlagDirective(templateRef, viewContainer as never, flags);
-    directive.zenmanageIfFlag = 'checkout-v2';
+    const fixture = render(FlagHost);
+    fixture.componentInstance.invert.set(true);
 
-    await invokeRenderFromFlag(directive);
-
-    expect(viewContainer.clear).toHaveBeenCalledTimes(1);
-    expect(viewContainer.createEmbeddedView).toHaveBeenCalledWith(templateRef);
+    await until(fixture, () => expect(text(fixture)).toBe('on'));
   });
 
-  it('renders else template when flag is disabled', async () => {
-    const templateRef = {} as TemplateRef<unknown>;
-    const elseRef = {} as TemplateRef<unknown>;
-    const viewContainer = createViewContainerMock();
-    const flags = {
-      isEnabled: vi.fn(async () => false),
-    } as never;
+  it('shows nothing, not even the else template, while loading without a loading template', async () => {
+    installFakeApi([flag('promo', true)]);
+    configure();
 
-    const directive = new ZenmanageIfFlagDirective(templateRef, viewContainer as never, flags);
-    directive.zenmanageIfFlag = 'checkout-v2';
-    directive.zenmanageIfFlagElse = elseRef;
+    const fixture = render(BareFlagHost);
+    expect(text(fixture)).toBe('');
 
-    await invokeRenderFromFlag(directive);
-
-    expect(viewContainer.createEmbeddedView).toHaveBeenCalledWith(elseRef);
+    await until(fixture, () => expect(text(fixture)).toBe('on'));
   });
 
-  it('supports inverted rendering', async () => {
-    const templateRef = {} as TemplateRef<unknown>;
-    const elseRef = {} as TemplateRef<unknown>;
-    const viewContainer = createViewContainerMock();
-    const flags = {
-      isEnabled: vi.fn(async () => true),
-    } as never;
+  it('uses the default for a flag that does not exist', async () => {
+    installFakeApi([]);
+    configure();
 
-    const directive = new ZenmanageIfFlagDirective(templateRef, viewContainer as never, flags);
-    directive.zenmanageIfFlag = 'checkout-v2';
-    directive.zenmanageIfFlagElse = elseRef;
-    directive.zenmanageIfFlagInvert = true;
+    const fixture = render(FlagHost);
+    fixture.componentInstance.key.set('missing');
+    await until(fixture, () => expect(text(fixture)).toBe('off'));
 
-    await invokeRenderFromFlag(directive);
-
-    expect(viewContainer.createEmbeddedView).toHaveBeenCalledWith(elseRef);
+    fixture.componentInstance.fallback.set(true);
+    await until(fixture, () => expect(text(fixture)).toBe('on'));
   });
 
-  it('renders fallback branch when evaluation throws', async () => {
-    const templateRef = {} as TemplateRef<unknown>;
-    const elseRef = {} as TemplateRef<unknown>;
-    const viewContainer = createViewContainerMock();
-    const flags = {
-      isEnabled: vi.fn(async () => {
-        throw new Error('failed');
-      }),
-    } as never;
+  it('renders nothing for an empty key', async () => {
+    installFakeApi([flag('promo', true)]);
+    configure();
 
-    const directive = new ZenmanageIfFlagDirective(templateRef, viewContainer as never, flags);
-    directive.zenmanageIfFlag = 'checkout-v2';
-    directive.zenmanageIfFlagElse = elseRef;
+    const fixture = render(FlagHost);
+    await until(fixture, () => expect(text(fixture)).toBe('on'));
 
-    await invokeRenderFromFlag(directive);
-
-    expect(viewContainer.createEmbeddedView).toHaveBeenCalledWith(elseRef);
+    fixture.componentInstance.key.set('');
+    fixture.detectChanges();
+    expect(text(fixture)).toBe('');
   });
 
-  it('coerces string and numeric default values to booleans', async () => {
-    const templateRef = {} as TemplateRef<unknown>;
-    const viewContainer = createViewContainerMock();
-    const isEnabled = vi.fn(async () => true);
-    const flags = {
-      isEnabled,
-    } as Pick<ZenmanageFlagsService, 'isEnabled'>;
+  it('never shows the old flag for a new key while it loads', async () => {
+    installFakeApi([flag('promo', true), flag('other', false)]);
+    configure();
 
-    const directive = new ZenmanageIfFlagDirective(
-      templateRef,
-      viewContainer as never,
-      flags as never
-    );
-    directive.zenmanageIfFlag = 'checkout-v2';
+    const fixture = render(FlagHost);
+    await until(fixture, () => expect(text(fixture)).toBe('on'));
 
-    directive.zenmanageIfFlagDefault = 'true';
-    await invokeRenderFromFlag(directive);
+    fixture.componentInstance.key.set('other');
+    fixture.detectChanges();
+    expect(text(fixture)).toBe('loading');
 
-    directive.zenmanageIfFlagDefault = 1;
-    await invokeRenderFromFlag(directive);
-
-    expect(isEnabled).toHaveBeenCalledWith('checkout-v2', true, {
-      context: undefined,
-    });
+    await until(fixture, () => expect(text(fixture)).toBe('off'));
   });
 
-  it('ignores stale async responses after destroy', async () => {
-    const templateRef = {} as TemplateRef<unknown>;
-    const viewContainer = createViewContainerMock();
-    const pending = deferred<boolean>();
-    const isEnabled = vi.fn(async () => pending.promise);
-    const flags = {
-      isEnabled,
-    } as Pick<ZenmanageFlagsService, 'isEnabled'>;
+  it('keeps the rendered view through a refresh when the answer stays the same', async () => {
+    const api = installFakeApi([flag('promo', true)]);
+    configure();
 
-    const directive = new ZenmanageIfFlagDirective(
-      templateRef,
-      viewContainer as never,
-      flags as never
-    );
-    directive.zenmanageIfFlag = 'checkout-v2';
+    const fixture = render(FlagHost);
+    await until(fixture, () => expect(text(fixture)).toBe('on'));
+    const before = (fixture.nativeElement as HTMLElement).querySelector('span');
 
-    directive.ngOnChanges({});
-    directive.ngOnDestroy();
-    pending.resolve(true);
-    await Promise.resolve();
+    await service().refresh();
+    await until(fixture, () => expect(api.rulesLoads()).toHaveLength(2));
+    fixture.detectChanges();
 
-    expect(viewContainer.createEmbeddedView).not.toHaveBeenCalled();
+    expect(text(fixture)).toBe('on');
+    expect((fixture.nativeElement as HTMLElement).querySelector('span')).toBe(before);
+  });
+
+  it('swaps the view when a refresh changes the answer', async () => {
+    const api = installFakeApi([flag('promo', true)]);
+    configure();
+
+    const fixture = render(FlagHost);
+    await until(fixture, () => expect(text(fixture)).toBe('on'));
+
+    api.setFlags([flag('promo', false)]);
+    await service().refresh();
+
+    await until(fixture, () => expect(text(fixture)).toBe('off'));
+  });
+
+  it('evaluates for the context given to the directive', async () => {
+    installFakeApi([
+      flag('promo', false, [
+        { clauses: [{ attribute: 'plan', operator: 'equal', value: 'pro' }], value: true },
+      ] as never),
+    ]);
+    configure();
+    const pro = Context.single('user', 'a');
+    pro.addAttribute(new Attribute('plan', ['pro']));
+
+    const fixture = render(FlagHost);
+    await until(fixture, () => expect(text(fixture)).toBe('off'));
+
+    fixture.componentInstance.context.set(pro);
+    await until(fixture, () => expect(text(fixture)).toBe('on'));
   });
 });
 
-describe('ZenmanageIfVariantDirective', () => {
-  it('renders primary template on matching variant', async () => {
-    const templateRef = {} as TemplateRef<unknown>;
-    const viewContainer = createViewContainerMock();
-    const flags = {
-      getVariant: vi.fn(async () => 'one-page'),
-    } as never;
+describe('*zenmanageIfVariant', () => {
+  it('shows the loading template, then the template for a matching variant', async () => {
+    installFakeApi([flag('checkout', 'stepper')]);
+    configure();
 
-    const directive = new ZenmanageIfVariantDirective(templateRef, viewContainer as never, flags);
-    directive.zenmanageIfVariant = 'checkout-flow';
-    directive.zenmanageIfVariantIs = ['one-page', 'control'];
+    const fixture = render(VariantHost);
+    expect(text(fixture)).toBe('loading');
 
-    await invokeRenderFromVariant(directive);
-
-    expect(viewContainer.createEmbeddedView).toHaveBeenCalledWith(templateRef);
+    await until(fixture, () => expect(text(fixture)).toBe('match'));
   });
 
-  it('renders else template on non-matching variant', async () => {
-    const templateRef = {} as TemplateRef<unknown>;
-    const elseRef = {} as TemplateRef<unknown>;
-    const viewContainer = createViewContainerMock();
-    const flags = {
-      getVariant: vi.fn(async () => 'multi-step'),
-    } as never;
+  it('shows the else template for any other variant', async () => {
+    installFakeApi([flag('checkout', 'legacy')]);
+    configure();
 
-    const directive = new ZenmanageIfVariantDirective(templateRef, viewContainer as never, flags);
-    directive.zenmanageIfVariant = 'checkout-flow';
-    directive.zenmanageIfVariantIs = 'one-page';
-    directive.zenmanageIfVariantElse = elseRef;
+    const fixture = render(VariantHost);
 
-    await invokeRenderFromVariant(directive);
-
-    expect(viewContainer.createEmbeddedView).toHaveBeenCalledWith(elseRef);
+    await until(fixture, () => expect(text(fixture)).toBe('other'));
   });
 
-  it('clears view when no variant key is provided', async () => {
-    const templateRef = {} as TemplateRef<unknown>;
-    const viewContainer = createViewContainerMock();
-    const flags = {
-      getVariant: vi.fn(async () => 'control'),
-    } as never;
+  it('accepts a single variant, and inverts', async () => {
+    installFakeApi([flag('checkout', 'legacy')]);
+    configure();
 
-    const directive = new ZenmanageIfVariantDirective(templateRef, viewContainer as never, flags);
-    directive.zenmanageIfVariant = '';
+    const fixture = render(VariantHost);
+    fixture.componentInstance.expected.set('legacy');
+    await until(fixture, () => expect(text(fixture)).toBe('match'));
 
-    directive.ngOnChanges({});
-    await Promise.resolve();
-
-    expect(viewContainer.clear).toHaveBeenCalledTimes(1);
+    fixture.componentInstance.invert.set(true);
+    await until(fixture, () => expect(text(fixture)).toBe('other'));
   });
 
-  it('supports inverted variant rendering and string expected values', async () => {
-    const templateRef = {} as TemplateRef<unknown>;
-    const elseRef = {} as TemplateRef<unknown>;
-    const viewContainer = createViewContainerMock();
-    const flags = {
-      getVariant: vi.fn(async () => 'one-page'),
-    } as never;
+  it('matches nothing when no variant is expected', async () => {
+    installFakeApi([flag('checkout', 'legacy')]);
+    configure();
 
-    const directive = new ZenmanageIfVariantDirective(templateRef, viewContainer as never, flags);
-    directive.zenmanageIfVariant = 'checkout-flow';
-    directive.zenmanageIfVariantIs = 'one-page';
-    directive.zenmanageIfVariantInvert = true;
-    directive.zenmanageIfVariantElse = elseRef;
+    const fixture = render(VariantHost);
+    fixture.componentInstance.expected.set([]);
 
-    await invokeRenderFromVariant(directive);
-
-    expect(viewContainer.createEmbeddedView).toHaveBeenCalledWith(elseRef);
+    await until(fixture, () => expect(text(fixture)).toBe('other'));
   });
 
-  it('renders else template when variant evaluation throws', async () => {
-    const templateRef = {} as TemplateRef<unknown>;
-    const elseRef = {} as TemplateRef<unknown>;
-    const viewContainer = createViewContainerMock();
-    const flags = {
-      getVariant: vi.fn(async () => {
-        throw new Error('failed');
-      }),
-    } as never;
+  it('uses the default variant for a flag that does not exist', async () => {
+    installFakeApi([]);
+    configure();
 
-    const directive = new ZenmanageIfVariantDirective(templateRef, viewContainer as never, flags);
-    directive.zenmanageIfVariant = 'checkout-flow';
-    directive.zenmanageIfVariantIs = 'one-page';
-    directive.zenmanageIfVariantElse = elseRef;
+    const fixture = render(VariantHost);
+    fixture.componentInstance.key.set('missing');
+    fixture.componentInstance.expected.set('control');
 
-    await invokeRenderFromVariant(directive);
+    await until(fixture, () => expect(text(fixture)).toBe('match'));
+  });
 
-    expect(viewContainer.createEmbeddedView).toHaveBeenCalledWith(elseRef);
+  it('renders nothing for an empty key', async () => {
+    installFakeApi([flag('checkout', 'stepper')]);
+    configure();
+
+    const fixture = render(VariantHost);
+    await until(fixture, () => expect(text(fixture)).toBe('match'));
+
+    fixture.componentInstance.key.set('');
+    fixture.detectChanges();
+    expect(text(fixture)).toBe('');
+  });
+
+  it('evaluates for the context given to the directive', async () => {
+    installFakeApi([
+      flag('checkout', 'legacy', [
+        { clauses: [{ attribute: 'plan', operator: 'equal', value: 'pro' }], value: 'stepper' },
+      ] as never),
+    ]);
+    configure();
+    const pro = Context.single('user', 'a');
+    pro.addAttribute(new Attribute('plan', ['pro']));
+
+    const fixture = render(VariantHost);
+    await until(fixture, () => expect(text(fixture)).toBe('other'));
+
+    fixture.componentInstance.context.set(pro);
+    await until(fixture, () => expect(text(fixture)).toBe('match'));
   });
 });

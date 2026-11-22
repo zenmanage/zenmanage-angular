@@ -1,46 +1,34 @@
-import { Component, inject } from '@angular/core';
+import { Component } from '@angular/core';
 import { RouterLink, RouterOutlet } from '@angular/router';
 import {
-  ZenmanageFlagsService,
   ZenmanageIfFlagDirective,
   ZenmanageIfVariantDirective,
+  injectVariant,
 } from '@zenmanage/angular';
 
 @Component({
   selector: 'example-app-root',
-  standalone: true,
   imports: [RouterOutlet, RouterLink, ZenmanageIfFlagDirective, ZenmanageIfVariantDirective],
   template: `
-    <h1>Zenmanage Angular Example</h1>
+    <h1>Zenmanage Angular example</h1>
 
-    <p>checkout-flow variant: {{ checkoutVariant }}</p>
+    <p>checkout-flow variant: {{ checkout.variant() }}</p>
 
-    <ng-container *zenmanageIfFlag="'new-dashboard'; default: false; else: oldDashboard">
-      <section>New dashboard content</section>
-    </ng-container>
+    <section *zenmanageIfFlag="'new-dashboard'; else oldDashboard; loading: loading">
+      New dashboard content
+    </section>
+    <ng-template #oldDashboard><section>Old dashboard content</section></ng-template>
+    <ng-template #loading><section>Loading…</section></ng-template>
 
-    <ng-template #oldDashboard>
-      <section>Old dashboard content</section>
-    </ng-template>
+    <section *zenmanageIfVariant="'checkout-flow'; is: ['one-page']; else controlFlow">
+      One-page checkout experiment
+    </section>
+    <ng-template #controlFlow><section>Control checkout flow</section></ng-template>
 
-    <ng-container *zenmanageIfVariant="'checkout-flow'; is: ['one-page']; else: controlFlow">
-      <section>One-page checkout experiment</section>
-    </ng-container>
-
-    <ng-template #controlFlow>
-      <section>Control checkout flow</section>
-    </ng-template>
-
-    <a routerLink="/beta">Go to beta route</a>
+    <a routerLink="/beta">Go to the beta area</a>
     <router-outlet />
   `,
 })
 export class AppComponent {
-  private readonly flags = inject(ZenmanageFlagsService);
-
-  checkoutVariant = 'control';
-
-  async ngOnInit(): Promise<void> {
-    this.checkoutVariant = await this.flags.getVariant('checkout-flow', 'control');
-  }
+  readonly checkout = injectVariant('checkout-flow');
 }

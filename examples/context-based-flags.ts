@@ -1,26 +1,51 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { Attribute, Context } from '@zenmanage/sdk';
-import { ZenmanageFlagsService } from '@zenmanage/angular';
+import { ZenmanageFlagsService, injectFlag, provideZenmanage } from '@zenmanage/angular';
+
+function userContext(id: string, plan: string, country: string): Context {
+  const context = Context.single('user', id);
+  context.addAttribute(new Attribute('plan', [plan]));
+  context.addAttribute(new Attribute('country', [country]));
+  return context;
+}
+
+// The signed-in user. Set it when someone signs in, clear it when they sign out.
+export const currentUser = signal<Context | undefined>(undefined);
+
+// Pass a signal and every flag in the app re-evaluates when the user changes. An equal-but-new
+// Context (same attributes) doesn't restart loading.
+export const contextProviders = [
+  provideZenmanage({
+    environmentToken: 'cli_your_client_key_here',
+    context: currentUser,
+  }),
+];
 
 @Component({
-  selector: 'example-context-based-flags',
-  standalone: true,
+  selector: 'example-context-flags',
   template: `
-    <h2>Context-Based Flags</h2>
-    <p>premium-banner enabled: {{ enabled }}</p>
+    <button (click)="signIn()">Sign in</button>
+    <p>Beta: {{ beta.value() }}</p>
+    <p>Beta for a Canadian pro user: {{ canadianPro.value() }}</p>
   `,
 })
-export class ContextBasedFlagsExampleComponent {
+export class ContextFlagsExampleComponent {
   private readonly flags = inject(ZenmanageFlagsService);
 
-  enabled = false;
+  // Uses the user from provideZenmanage.
+  readonly beta = injectFlag('beta-program', false);
 
-  async ngOnInit(): Promise<void> {
-    const context = new Context('user', 'Jane Doe', 'user-123', [
-      new Attribute('country', ['US']),
-      new Attribute('plan', ['pro']),
-    ]);
+  // A context of its own, for this one flag.
+  readonly canadianPro = injectFlag('beta-program', false, {
+    context: userContext('preview', 'pro', 'CA'),
+  });
 
-    this.enabled = await this.flags.isEnabled('premium-banner', false, { context });
+  signIn(): void {
+    currentUser.set(userContext('user-123', 'pro', 'US'));
+  }
+
+  // Or evaluate once, in code, for any context.
+  isEnabledFor(context: Context): Promise<boolean> {
+    return this.flags.isEnabled('beta-program', false, { context });
   }
 }
