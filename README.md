@@ -2,6 +2,7 @@
 
 [![npm version](https://badge.fury.io/js/@zenmanage%2Fangular.svg)](https://www.npmjs.com/package/@zenmanage/angular)
 [![Build Status](https://github.com/zenmanage/zenmanage-angular/actions/workflows/ci.yml/badge.svg)](https://github.com/zenmanage/zenmanage-angular)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/35f06c17f2dd425fb99ff35bd1a165b3)](https://app.codacy.com/gh/zenmanage/zenmanage-angular/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 
 Angular service, signals, structural directives, route guards, and server-rendering support for Zenmanage feature flags.
