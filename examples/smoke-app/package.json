@@ -20,7 +20,7 @@
     "@angular/platform-server": "^22.0.0",
     "@angular/router": "^22.0.0",
     "@types/node": "^22.0.0",
-    "jsdom": "^24.1.1",
+    "jsdom": "^31.0.1",
     "typescript": "~6.0.0",
     "vitest": "^1.6.0",
     "zone.js": "~0.15.0"
