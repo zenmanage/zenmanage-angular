@@ -93,7 +93,11 @@ export function injectFlag<T extends FlagValue>(
 
       if (current === evaluation && !isDestroyed) {
         const value = coerceFlagValue(flag, fallback);
-        evaluated.set(evaluatedKey, value);
+        // The payload is what the page shows for the service's context. A flag read for a
+        // context of its own would put another user's answer where the base context's belongs.
+        if (context === undefined) {
+          evaluated.set(evaluatedKey, value);
+        }
         resolution.set({
           key: evaluatedKey,
           manager,
@@ -148,6 +152,9 @@ export function injectFlag<T extends FlagValue>(
       return undefined;
     }
 
+    // The SDK answers with no flags, rather than an error, when it can't reach the API, so an
+    // empty list can't be told apart from a failed load and keeps the server's value. For an
+    // environment that really has no flags that is harmless: the server answered from the default.
     const loaded = live();
     const rulesLoaded = loaded !== null && loaded.size > 0;
     return rulesLoaded && settled() !== null ? undefined : candidate;

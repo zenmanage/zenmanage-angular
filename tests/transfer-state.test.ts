@@ -211,4 +211,32 @@ describe('starting from what the server rendered', () => {
 
     expect(off.result.value()).toBe(false);
   });
+
+  it('stops showing the server value once the first evaluation has loaded the rules, with preload off', async () => {
+    installFakeApi([flag('promo', false)]);
+
+    const { fixture, result } = mount(() => injectFlag('promo', true), { preload: false }, [
+      transferred(fromServer),
+    ]);
+    expect(result.value()).toBe(true);
+
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(result.value()).toBe(false);
+    });
+  });
+
+  it("drops the server values as defaults once the context changes: they were another user's answers", async () => {
+    installFakeApi([]).goOffline();
+    const context = signal<Context | undefined>(undefined);
+
+    mount(() => undefined, { context }, [transferred(fromServer)]);
+    expect(service().defaults()?.get('mode')).toBe('stepper');
+
+    context.set(Context.single('user', 'someone-else'));
+    expect(service().defaults()?.get('mode')).toBeUndefined();
+
+    context.set(undefined);
+    expect(service().defaults()?.get('mode')).toBe('stepper');
+  });
 });

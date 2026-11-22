@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { PACKAGE_VERSION } from '../src/lib/identity';
 import { internalsOf } from '../src/lib/internal';
 import { flag, installFakeApi } from './fakeApi';
-import { configure, service } from './helpers';
+import { injectFlag } from '../src/lib/inject-flag';
+import { configure, mount, service, untilLoaded } from './helpers';
 import pkg from '../package.json';
 
 const rules = [{ clauses: [{ attribute: 'plan', operator: 'equal', value: 'pro' }], value: true }];
@@ -285,6 +286,21 @@ describe('ZenmanageFlagsService', () => {
   });
 
   describe('bootstrap payloads', () => {
+    it('leaves out flags that were read for a context of their own', async () => {
+      installFakeApi([flag('beta', false, rules as never), flag('mode', 'a')]);
+      const { fixture, result } = mount(() => ({
+        base: injectFlag('beta', true),
+        own: injectFlag('beta', false, { context: user('p', 'pro') }),
+        mode: injectFlag('mode', 'unset'),
+      }));
+      await untilLoaded(fixture, result.base, result.own, result.mode);
+
+      expect(result.base.value()).toBe(false);
+      expect(result.own.value()).toBe(true);
+      // The page's `beta` is the base context's answer, not the override's.
+      expect((await service().getBootstrapPayload()).flags).toEqual({ beta: false, mode: 'a' });
+    });
+
     it('covers every flag in the environment when asked for keys', async () => {
       installFakeApi([flag('a', true), flag('b', 'x'), flag('c', 1)]);
       configure();

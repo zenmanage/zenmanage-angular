@@ -94,6 +94,9 @@ export class ZenmanageFlagsService {
   private readonly preloadEnabled = this.options.preload !== false;
   private readonly transferEnabled = this.options.transferState !== false;
   private readonly bootstrapDefaults: DefaultsCollection | undefined;
+  /** The context the server's values were evaluated for. They are another user's answers for any other. */
+  private readonly seedContextSignature: string;
+  private readonly lives = new WeakMap<FlagManager, Promise<void>>();
   private readonly loadState = signal<LoadState | null>(null);
   private readonly loads = new WeakMap<FlagManager, Promise<void>>();
   private readonly evaluated = new Map<string, FlagValue>();
@@ -127,6 +130,7 @@ export class ZenmanageFlagsService {
   constructor() {
     this.bootstrap = this.resolveBootstrap();
     this.bootstrapDefaults = defaultsFromBootstrapPayload(this.bootstrap);
+    this.seedContextSignature = describeContext(untracked(() => this.currentContext()));
 
     this.context = computed(() => this.currentContext());
     this.defaults = computed(() => this.currentDefaults());
@@ -251,6 +255,10 @@ export class ZenmanageFlagsService {
       const base = this.manager();
       await this.ensureLoad(base);
 
+      if (!this.preloadEnabled) {
+        await this.ensureLive(base);
+      }
+
       let target = base;
       if (options?.context) {
         target = target.withContext(options.context);
@@ -354,8 +362,16 @@ export class ZenmanageFlagsService {
       : readSource(this.options.context);
   }
 
+  // The server's values are fallbacks for the user it rendered for. Once the context changes
+  // (someone else signed in) they would hand that user the previous user's targeted answers
+  // whenever the rules can't load, so they are dropped.
   private currentDefaults(): DefaultsCollection | undefined {
-    return mergeDefaults(readSource(this.options.defaults), this.bootstrapDefaults);
+    const forSeedContext = describeContext(this.currentContext()) === this.seedContextSignature;
+
+    return mergeDefaults(
+      readSource(this.options.defaults),
+      forSeedContext ? this.bootstrapDefaults : undefined
+    );
   }
 
   // The manager is copied even without a context or defaults: a manager loads its rules once
@@ -371,6 +387,29 @@ export class ZenmanageFlagsService {
     }
 
     return manager;
+  }
+
+  // With `preload` off nothing has read the rules when the first evaluation starts. Reading them
+  // here tells which flags they contain, so a server value stops standing in for the live one.
+  private ensureLive(target: FlagManager): Promise<void> {
+    let live = this.lives.get(target);
+
+    if (!live) {
+      const record = (keys: Set<string>): void =>
+        this.loadState.update((current) =>
+          current?.manager === target && current.live === null
+            ? { ...current, live: keys }
+            : current
+        );
+
+      live = target.all().then(
+        (flags) => record(new Set(flags.map((flag) => flag.getKey()))),
+        () => record(new Set())
+      );
+      this.lives.set(target, live);
+    }
+
+    return live;
   }
 
   // One load per manager, started by whichever consumer asks first. Resolves whatever
