@@ -1,14 +1,16 @@
 import { Component } from '@angular/core';
 import { ZenmanageIfVariantDirective, injectVariant } from '@zenmanage/angular';
 
+// prettier-ignore
+
 @Component({
   selector: 'example-ab-testing',
   imports: [ZenmanageIfVariantDirective],
   template: `
     <!-- Render one branch per variant... -->
-    <p *zenmanageIfVariant="'checkout-flow'; is: 'one-page'; else other">One-page checkout</p>
+    <p *zenmanageIfVariant="'checkout-flow'; is: 'one-page'; else: other">One-page checkout</p>
     <ng-template #other>
-      <p *zenmanageIfVariant="'checkout-flow'; is: ['stepper', 'wizard']; else control">
+      <p *zenmanageIfVariant="'checkout-flow'; is: ['stepper', 'wizard']; else: control">
         Multi-step checkout
       </p>
     </ng-template>

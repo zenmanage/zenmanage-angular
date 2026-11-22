@@ -41,15 +41,20 @@ function transferState(html: string): Record<string, unknown> {
   return JSON.parse(json) as Record<string, unknown>;
 }
 
-/** The visible text, with elements marked `data-test` pulled out, by parsing the markup lightly. */
+/** The visible text of the element marked `data-test`, by finding it in the markup without a parser. */
 function textOf(html: string, id: string): string {
-  const match = new RegExp(`<(\\w+) data-test="${id}"[^>]*>([\\s\\S]*?)</\\1>`).exec(html);
+  const marker = html.indexOf(`data-test="${id}"`);
+  const open = marker === -1 ? -1 : html.lastIndexOf('<', marker);
+  const tag = open === -1 ? '' : (/^<(\w+)/.exec(html.slice(open))?.[1] ?? '');
+  const start = tag ? html.indexOf('>', marker) + 1 : 0;
+  const end = tag ? html.indexOf(`</${tag}>`, start) : -1;
 
-  if (!match) {
+  if (end === -1) {
     throw new Error(`No element with data-test="${id}" in the rendered HTML`);
   }
 
-  return match[2]
+  return html
+    .slice(start, end)
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<[^>]*>/g, '')
     .replace(/\s+/g, ' ')

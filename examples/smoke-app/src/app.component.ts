@@ -12,6 +12,7 @@ import {
 
 // Every default in this app differs from the value the fake API serves, so a default that
 // leaks into the page can't pass for the real thing.
+// prettier-ignore
 @Component({
   selector: 'app-root',
   imports: [ZenmanageIfFlagDirective, ZenmanageIfVariantDirective, RouterLink, RouterOutlet],
@@ -26,12 +27,12 @@ import {
     <p data-test="variant">{{ flow.variant() }}</p>
 
     <p data-test="checkout">
-      <span *zenmanageIfFlag="'new-checkout'; else classicCheckout; loading: spin; default: false"
+      <span *zenmanageIfFlag="'new-checkout'; else: classicCheckout; loading: spin; default: false"
         >New checkout</span
       >
     </p>
     <p data-test="banner">
-      <span *zenmanageIfFlag="'beta-banner'; else noBanner; loading: spin; default: true"
+      <span *zenmanageIfFlag="'beta-banner'; else: noBanner; loading: spin; default: true"
         >Beta banner</span
       >
     </p>
@@ -40,7 +41,7 @@ import {
         *zenmanageIfVariant="
           'checkout-flow';
           is: ['one-page', 'stepper'];
-          else classicFlow;
+          else: classicFlow;
           loading: spin;
           default: 'control'
         "
@@ -52,7 +53,7 @@ import {
         *zenmanageIfVariant="
           'pricing-layout';
           is: ['monthly'];
-          else otherPricing;
+          else: otherPricing;
           loading: spin;
           default: 'monthly'
         "
@@ -82,20 +83,32 @@ export class AppComponent {
   readonly flow = injectVariant('checkout-flow', 'control');
 }
 
+// prettier-ignore
+
 @Component({ template: 'Home page' })
 export class HomePage {}
+
+// prettier-ignore
 
 @Component({ template: 'Beta page' })
 export class BetaPage {}
 
+// prettier-ignore
+
 @Component({ template: 'Checkout page' })
 export class CheckoutPage {}
+
+// prettier-ignore
 
 @Component({ template: 'Labs page' })
 export class LabsPage {}
 
+// prettier-ignore
+
 @Component({ template: 'Lazy page' })
 export class LazyPage {}
+
+// prettier-ignore
 
 @Component({ template: 'Not found' })
 export class NotFoundPage {}

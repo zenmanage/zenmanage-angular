@@ -27,7 +27,7 @@ let app: ApplicationRef | undefined;
 afterEach(() => {
   app?.destroy();
   app = undefined;
-  document.body.innerHTML = '';
+  document.body.replaceChildren();
 });
 
 describe('starting from the server payload, from the packed package', () => {
@@ -38,10 +38,13 @@ describe('starting from the server payload, from the packed package', () => {
 
     // What Angular's server render writes into the page: TransferState under its own key.
     const payload = buildBootstrapPayload(SERVER_VALUES);
-    document.body.innerHTML = `<app-root></app-root>
-      <script id="ng-state" type="application/json">${JSON.stringify({
-        [ZENMANAGE_STATE_KEY]: payload,
-      })}</script>`;
+    document.body.replaceChildren();
+    document.body.append(document.createElement('app-root'));
+    const state = document.createElement('script');
+    state.id = 'ng-state';
+    state.type = 'application/json';
+    state.textContent = JSON.stringify({ [ZENMANAGE_STATE_KEY]: payload });
+    document.body.append(state);
 
     app = await bootstrapApplication(
       AppComponent,
@@ -75,7 +78,7 @@ describe('starting from the server payload, from the packed package', () => {
   it('renders the defaults on the first render when there is no payload', async () => {
     installFakeApi(LIVE_FLAGS);
     const release = holdNetwork();
-    document.body.innerHTML = '<app-root></app-root>';
+    document.body.replaceChildren(document.createElement('app-root'));
 
     app = await bootstrapApplication(
       AppComponent,

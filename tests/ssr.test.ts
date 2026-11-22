@@ -14,14 +14,16 @@ import { flag, installFakeApi } from './fakeApi';
 
 const SERVER_KEY = 'srv_test_server_key';
 
+// prettier-ignore
+
 @Component({
   selector: 'app-root',
   imports: [ZenmanageIfFlagDirective, ZenmanageIfVariantDirective],
   template: `
     <p id="values">{{ mode() }}|{{ timeout() }}|{{ ui().theme }}|{{ missing() }}</p>
-    <b *zenmanageIfFlag="'promo'; else off">promo on</b>
+    <b *zenmanageIfFlag="'promo'; else: off">promo on</b>
     <ng-template #off><b>promo off</b></ng-template>
-    <i *zenmanageIfVariant="'checkout'; is: ['stepper']; else other">stepper</i>
+    <i *zenmanageIfVariant="'checkout'; is: ['stepper']; else: other">stepper</i>
     <ng-template #other><i>not stepper</i></ng-template>
   `,
 })

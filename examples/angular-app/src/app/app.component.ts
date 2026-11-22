@@ -6,6 +6,8 @@ import {
   injectVariant,
 } from '@zenmanage/angular';
 
+// prettier-ignore
+
 @Component({
   selector: 'example-app-root',
   imports: [RouterOutlet, RouterLink, ZenmanageIfFlagDirective, ZenmanageIfVariantDirective],
@@ -14,13 +16,13 @@ import {
 
     <p>checkout-flow variant: {{ checkout.variant() }}</p>
 
-    <section *zenmanageIfFlag="'new-dashboard'; else oldDashboard; loading: loading">
+    <section *zenmanageIfFlag="'new-dashboard'; else: oldDashboard; loading: loading">
       New dashboard content
     </section>
     <ng-template #oldDashboard><section>Old dashboard content</section></ng-template>
     <ng-template #loading><section>Loading…</section></ng-template>
 
-    <section *zenmanageIfVariant="'checkout-flow'; is: ['one-page']; else controlFlow">
+    <section *zenmanageIfVariant="'checkout-flow'; is: ['one-page']; else: controlFlow">
       One-page checkout experiment
     </section>
     <ng-template #controlFlow><section>Control checkout flow</section></ng-template>

@@ -6,6 +6,7 @@ import {
   injectVariant,
 } from '@zenmanage/angular';
 
+// prettier-ignore
 @Component({
   selector: 'example-simple-flags',
   imports: [ZenmanageIfFlagDirective],
@@ -18,7 +19,7 @@ import {
     <p>max-items: {{ maxItems.value() }}</p>
 
     <!-- Or let a directive decide what to render. -->
-    <section *zenmanageIfFlag="'new-dashboard'; else legacy; loading: spinner">
+    <section *zenmanageIfFlag="'new-dashboard'; else: legacy; loading: spinner">
       Dashboard v2
     </section>
     <ng-template #legacy><section>Dashboard v1</section></ng-template>

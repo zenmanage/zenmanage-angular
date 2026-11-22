@@ -6,6 +6,8 @@ import { ZenmanageIfVariantDirective } from '../src/lib/zenmanage-if-variant.dir
 import { flag, installFakeApi } from './fakeApi';
 import { configure, render, service, text, until } from './helpers';
 
+// prettier-ignore
+
 @Component({
   imports: [ZenmanageIfFlagDirective],
   template: `
@@ -13,7 +15,7 @@ import { configure, render, service, text, until } from './helpers';
       <span
         *zenmanageIfFlag="
           key();
-          else off;
+          else: off;
           loading: pending;
           default: fallback();
           invert: invert();
@@ -33,11 +35,15 @@ class FlagHost {
   readonly context = signal<Context | undefined>(undefined);
 }
 
+// prettier-ignore
+
 @Component({
   imports: [ZenmanageIfFlagDirective],
   template: `<span *zenmanageIfFlag="'promo'">on</span>`,
 })
 class BareFlagHost {}
+
+// prettier-ignore
 
 @Component({
   imports: [ZenmanageIfVariantDirective],
@@ -47,7 +53,7 @@ class BareFlagHost {}
         *zenmanageIfVariant="
           key();
           is: expected();
-          else other;
+          else: other;
           loading: pending;
           default: fallback();
           invert: invert();

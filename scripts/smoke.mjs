@@ -17,7 +17,9 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const angularVersion = process.env.SMOKE_ANGULAR_VERSION;
+// Unset or `latest` keeps the newest Angular the app's own package.json resolves.
+const requestedVersion = process.env.SMOKE_ANGULAR_VERSION;
+const angularVersion = requestedVersion === 'latest' ? undefined : requestedVersion;
 const work = mkdtempSync(join(tmpdir(), 'zenmanage-angular-smoke-'));
 const appDir = join(work, 'app');
 
