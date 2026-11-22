@@ -1,24 +1,15 @@
-import { Component, inject } from '@angular/core';
+import { Component } from '@angular/core';
 import { Context } from '@zenmanage/sdk';
-import { ZenmanageFlagsService } from '@zenmanage/angular';
+import { injectFlag } from '@zenmanage/angular';
 
 @Component({
   selector: 'example-percentage-rollouts',
-  standalone: true,
-  template: `
-    <h2>Percentage Rollouts</h2>
-    <p>user: {{ userId }}</p>
-    <p>new-checkout-flow enabled: {{ enabled }}</p>
-  `,
+  template: `<p>{{ checkout.value() ? 'New checkout' : 'Old checkout' }}</p>`,
 })
 export class PercentageRolloutsExampleComponent {
-  private readonly flags = inject(ZenmanageFlagsService);
-
-  userId = 'user-42';
-  enabled = false;
-
-  async ngOnInit(): Promise<void> {
-    const context = Context.single('user', this.userId);
-    this.enabled = await this.flags.isEnabled('new-checkout-flow', false, { context });
-  }
+  // A rollout buckets by the context's identifier: the same user always lands on the same side,
+  // and a context without an identifier never gets a gradual rollout.
+  readonly checkout = injectFlag('checkout-rollout', false, {
+    context: Context.single('user', 'user-123'),
+  });
 }

@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.aot.json",
+  "include": ["aot-negative/**/*.ts"]
+}

@@ -1,147 +1,108 @@
-import { APP_INITIALIZER } from '@angular/core';
-import { Context, DefaultsCollection, Zenmanage } from '@zenmanage/sdk';
+import { Component, NgModule, provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { Zenmanage } from '@zenmanage/sdk';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  createZenmanageClient,
-  createZenmanageFlagManager,
-  createZenmanageProviders,
-  provideZenmanage,
-} from '../src/lib/providers';
-import { createMockFlagManager } from './test-utils';
+import { createZenmanageClient } from '../src/lib/client';
+import { ZENMANAGE_CLIENT, ZENMANAGE_OPTIONS } from '../src/lib/tokens';
+import { ZenmanageModule } from '../src/lib/zenmanage.module';
+import { ZenmanageFlagsService } from '../src/lib/zenmanage-flags.service';
+import { flag, installFakeApi } from './fakeApi';
+import { CLIENT_KEY, configure, render, service, text, until } from './helpers';
 
-function getInitializerFactory(providers: unknown[]): (...args: unknown[]) => () => Promise<void> {
-  const initializerProvider = providers.find(
-    (provider) =>
-      typeof provider === 'object' &&
-      provider !== null &&
-      'provide' in provider &&
-      (provider as { provide?: unknown }).provide === APP_INITIALIZER
-  );
+describe('provideZenmanage', () => {
+  it('builds the client from the environment token and starts loading with the app', async () => {
+    const api = installFakeApi([flag('promo', true)]);
+    configure();
 
-  if (
-    !initializerProvider ||
-    typeof (initializerProvider as { useFactory?: unknown }).useFactory !== 'function'
-  ) {
-    throw new Error('APP_INITIALIZER provider not found');
-  }
+    // Nothing has asked for the service yet; the environment initializer creates it.
+    TestBed.inject(ZENMANAGE_OPTIONS);
 
-  return (initializerProvider as { useFactory: (...args: unknown[]) => () => Promise<void> })
-    .useFactory;
-}
-
-describe('providers', () => {
-  it('returns the provided client when one is passed', () => {
-    const client = { flags: vi.fn() } as unknown as Zenmanage;
-
-    const result = createZenmanageClient({
-      client,
-      preload: false,
-    });
-
-    expect(result).toBe(client);
+    await service().whenReady();
+    expect(api.rulesLoads()).toHaveLength(1);
+    expect(TestBed.inject(ZENMANAGE_CLIENT)).toBeInstanceOf(Zenmanage);
   });
 
-  it('throws when neither client nor environment token is provided', () => {
-    expect(() => createZenmanageClient({ preload: false })).toThrow(
+  it('starts the load without anyone injecting the service', async () => {
+    const api = installFakeApi([flag('promo', true)]);
+    configure();
+
+    TestBed.inject(ZENMANAGE_OPTIONS); // creates the environment injector, and with it the initializer
+    await vi.waitFor(() => expect(api.rulesLoads()).toHaveLength(1));
+  });
+
+  it('uses the client it is given instead of building one', async () => {
+    installFakeApi([flag('promo', true)]);
+    const client = createZenmanageClient({ environmentToken: CLIENT_KEY }, false);
+    configure({ client, environmentToken: undefined });
+
+    expect(TestBed.inject(ZENMANAGE_CLIENT)).toBe(client);
+    expect(service().client).toBe(client);
+  });
+
+  it('asks for a token when there is neither a client nor a token', () => {
+    configure({ environmentToken: undefined });
+
+    expect(() => TestBed.inject(ZenmanageFlagsService)).toThrow(
       'Zenmanage Angular requires either a client or an environmentToken.'
     );
   });
+});
 
-  it('builds a client from environment token options', () => {
-    const client = createZenmanageClient({
-      environmentToken: 'srv_test_server_key',
-      apiEndpoint: 'https://api.zenmanage.com',
-      cacheTtl: 90,
-      enableUsageReporting: false,
-      preload: false,
+describe('ZenmanageModule.forRoot', () => {
+  @Component({
+    imports: [ZenmanageModule],
+    template: `<span *zenmanageIfFlag="'promo'; else off">on</span
+      ><ng-template #off>off</ng-template>`,
+  })
+  class Host {}
+
+  it('provides the service and exports both directives', async () => {
+    installFakeApi([flag('promo', true)]);
+    TestBed.configureTestingModule({
+      imports: [
+        ZenmanageModule.forRoot({ environmentToken: CLIENT_KEY, enableUsageReporting: false }),
+      ],
+      providers: [provideZonelessChangeDetection()],
     });
 
-    expect(client).toBeInstanceOf(Zenmanage);
+    const fixture = render(Host);
+    await until(fixture, () => expect(text(fixture)).toBe('on'));
+    expect(TestBed.inject(ZenmanageFlagsService)).toBeInstanceOf(ZenmanageFlagsService);
   });
 
-  it('applies context and defaults while building the manager', () => {
-    const manager = createMockFlagManager();
-    const client = {
-      flags: vi.fn(() => manager),
-    } as unknown as Zenmanage;
+  it('works inside an NgModule application', () => {
+    installFakeApi([]);
 
-    const context = Context.single('user', '123');
-    const defaults = DefaultsCollection.fromObject({
-      'checkout-v2': true,
+    @NgModule({
+      imports: [
+        ZenmanageModule.forRoot({ environmentToken: CLIENT_KEY, enableUsageReporting: false }),
+      ],
+    })
+    class AppModule {}
+
+    TestBed.configureTestingModule({
+      imports: [AppModule],
+      providers: [provideZonelessChangeDetection()],
     });
 
-    const result = createZenmanageFlagManager(client, { context, defaults, preload: false });
+    expect(TestBed.inject(ZenmanageFlagsService).isReady()).toBe(false);
+  });
+});
 
-    expect(client.flags).toHaveBeenCalledTimes(1);
-    expect(manager.withContext).toHaveBeenCalledWith(context);
-    expect(manager.withDefaults).toHaveBeenCalledWith(defaults);
-    expect(result).toBe(manager);
+describe('createZenmanageClient', () => {
+  it('builds a client per call in the browser', () => {
+    const options = { environmentToken: CLIENT_KEY };
+
+    expect(createZenmanageClient(options, false)).not.toBe(createZenmanageClient(options, false));
   });
 
-  it('creates APP_INITIALIZER that preloads flags by default', async () => {
-    const options = {
-      environmentToken: 'srv_test_server_key',
-    };
+  it('shares one client per configuration on a server', () => {
+    // The same sharing is checked with a server key in server.test.ts; jsdom only accepts client keys.
+    const options = { environmentToken: CLIENT_KEY };
 
-    const providers = createZenmanageProviders(options);
-    const initializerFactory = getInitializerFactory(providers);
-
-    const service = {
-      preload: vi.fn(async () => undefined),
-    };
-
-    const runInitializer = initializerFactory(service, { preload: true });
-    await runInitializer();
-
-    expect(service.preload).toHaveBeenCalledTimes(1);
-  });
-
-  it('creates APP_INITIALIZER that skips preload when disabled', async () => {
-    const providers = createZenmanageProviders({
-      environmentToken: 'srv_test_server_key',
-      preload: false,
-    });
-    const initializerFactory = getInitializerFactory(providers);
-
-    const service = {
-      preload: vi.fn(async () => undefined),
-      markReadyWithoutPreload: vi.fn(),
-    };
-
-    const runInitializer = initializerFactory(service, { preload: false });
-    await runInitializer();
-
-    expect(service.markReadyWithoutPreload).toHaveBeenCalledTimes(1);
-    expect(service.preload).not.toHaveBeenCalled();
-  });
-
-  it('calls onError callback when preload fails in initializer', async () => {
-    const onError = vi.fn();
-    const providers = createZenmanageProviders({
-      environmentToken: 'srv_test_server_key',
-      preload: true,
-      onError,
-    });
-    const initializerFactory = getInitializerFactory(providers);
-
-    const service = {
-      preload: vi.fn(async () => {
-        throw new Error('preload failed');
-      }),
-    };
-
-    const runInitializer = initializerFactory(service, { preload: true, onError });
-    await runInitializer();
-
-    expect(onError).toHaveBeenCalledTimes(1);
-  });
-
-  it('creates environment providers for standalone bootstrap', () => {
-    const providers = provideZenmanage({
-      environmentToken: 'srv_test_server_key',
-      preload: false,
-    });
-
-    expect(providers).toBeDefined();
+    expect(createZenmanageClient(options, true)).toBe(createZenmanageClient({ ...options }, true));
+    expect(createZenmanageClient(options, true)).not.toBe(
+      createZenmanageClient({ environmentToken: 'cli_other_key' }, true)
+    );
   });
 });
